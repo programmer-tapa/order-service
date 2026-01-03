@@ -1,7 +1,21 @@
 package com.example.orderservice.app.core.orders.features.createOrder.interfaces;
 
-public interface INTERFACE_HELPER_CreateOrder {
-    String saveOrder(String customerId, String items, double totalAmount);
+import com.example.orderservice.app.core.orders.entities.Order;
 
-    void publishEvent(String orderId, String customerId, String items, double totalAmount);
+public interface INTERFACE_HELPER_CreateOrder {
+
+    /**
+     * Saves an order to the database.
+     * 
+     * @param order The order entity to save
+     * @return The saved order with generated ID
+     */
+    Order saveOrder(Order order);
+
+    /**
+     * Publishes an OrderCreated event.
+     * 
+     * @param order The order that was created
+     */
+    void publishEvent(Order order);
 }
