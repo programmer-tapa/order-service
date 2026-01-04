@@ -4,44 +4,56 @@ A Java Spring Boot microservice for creating orders and publishing order events 
 
 ## Features
 
-- **Order Creation** – REST API endpoint to create new orders
+- **Order Creation** – REST API endpoint to create new orders with validation
 - **Event-Driven Architecture** – Publishes order events to Kafka for downstream processing
 - **Clean Architecture** – Separation of concerns with use cases, interfaces, and contracts
+- **Input Validation** – Comprehensive validation for customer ID, items, and pricing
 - **In-Memory Database** – H2 database for development and testing
 - **API Documentation** – SpringDoc OpenAPI with Swagger UI
+- **Unit Testing** – JUnit 5 with Mockito for comprehensive test coverage
 
 ## Project Structure
 
 ```
-src/main/java/com/example/orderservice/
-├── OrderserviceApplication.java          # Spring Boot main class
-├── app/
-│   ├── core/                              # Business logic
-│   │   ├── origin/                        # Shared base classes
-│   │   │   ├── entities/                  # AbstractService, AbstractUsecase
-│   │   │   ├── schemas/                   # ServiceOutput, ServiceDependency, User
-│   │   │   └── spring/                    # ControllerServiceExecutor
-│   │   └── orders/                        # Orders domain
-│   │       ├── entities/                  # Order, OrderItem, OrderStatus
-│   │       └── features/
-│   │           └── createOrder/
-│   │               ├── contracts/         # CONTRACT_HELPER_CreateOrder_V0
-│   │               ├── interfaces/        # INTERFACE_HELPER_CreateOrder
-│   │               ├── schemas/           # INPUT_CreateOrder, OUTPUT_CreateOrder
-│   │               ├── services/          # SERVICE_CreateOrder
-│   │               ├── usecases/          # USECASE_CreateOrder
-│   │               └── spring/            # BEAN_CreateOrder
-│   └── infra/                             # Infrastructure layer
-│       ├── events/
-│       │   ├── contracts/                 # KafkaService
-│       │   ├── entities/                  # Event
-│       │   └── interfaces/                # EventService
-│       └── logger/                        # Logging utilities
-└── framework/                             # Framework entrypoints
-    └── entrypoints/
-        └── api/
-            └── orders/
-                └── controllers/           # OrdersController
+src/
+├── main/java/com/example/orderservice/
+│   ├── OrderserviceApplication.java          # Spring Boot main class
+│   ├── app/
+│   │   ├── core/                              # Business logic
+│   │   │   ├── origin/                        # Shared base classes
+│   │   │   │   ├── contracts/                 # Base contracts
+│   │   │   │   ├── entities/                  # AbstractService, AbstractUsecase
+│   │   │   │   ├── exceptions/                # AppException
+│   │   │   │   ├── interfaces/                # Base interfaces
+│   │   │   │   ├── schemas/                   # ServiceOutput, ServiceStatus
+│   │   │   │   └── spring/                    # ControllerServiceExecutor
+│   │   │   └── orders/                        # Orders domain
+│   │   │       ├── entities/                  # Order, OrderItem, OrderStatus
+│   │   │       └── features/
+│   │   │           └── createOrder/
+│   │   │               ├── contracts/         # CONTRACT_HELPER_CreateOrder_V0
+│   │   │               ├── exceptions/        # InvalidOrderException
+│   │   │               ├── interfaces/        # INTERFACE_HELPER_CreateOrder
+│   │   │               ├── schemas/           # INPUT/OUTPUT_CreateOrder, InputOrderItem
+│   │   │               ├── services/          # SERVICE_CreateOrder
+│   │   │               ├── usecases/          # USECASE_CreateOrder
+│   │   │               └── spring/            # BEAN_CreateOrder
+│   │   └── infra/                             # Infrastructure layer
+│   │       ├── events/
+│   │       │   ├── contracts/                 # KafkaService
+│   │       │   ├── entities/                  # Event
+│   │       │   └── interfaces/                # EventService
+│   │       └── logger/                        # Logging utilities
+│   └── framework/                             # Framework entrypoints
+│       └── entrypoints/
+│           └── api/
+│               └── orders/
+│                   └── controllers/           # OrdersController
+└── test/java/com/example/orderservice/
+    ├── OrderserviceApplicationTests.java
+    └── app/core/orders/features/createOrder/
+        └── usecases/
+            └── USECASE_CreateOrderTest.java   # Unit tests for CreateOrder
 ```
 
 ## Tech Stack
@@ -50,11 +62,13 @@ src/main/java/com/example/orderservice/
 - **Spring Boot 4.0.1**
 - **Spring Data JPA** – ORM and data access
 - **Spring Kafka** – Kafka producer integration
+- **Spring Validation** – Bean validation
 - **H2 Database** – In-memory database (development)
-- **Lombok** – Boilerplate reduction
-- **MapStruct** – Object mapping
-- **SpringDoc OpenAPI** – API documentation
-- **spring-dotenv** – Environment configuration
+- **Lombok 1.18.42** – Boilerplate reduction
+- **MapStruct 1.6.3** – Object mapping
+- **SpringDoc OpenAPI 2.8.6** – API documentation
+- **spring-dotenv 4.0.0** – Environment configuration
+- **JUnit 5 + Mockito** – Testing framework
 
 ## Prerequisites
 
@@ -74,32 +88,23 @@ cd order-service
 
 ## Configuration
 
-Configuration is managed via `src/main/resources/application.yaml`:
+### Environment Variables
 
-```yaml
-spring:
-  application:
-    name: orderservice
-  datasource:
-    url: jdbc:h2:mem:orderdb
-    driver-class-name: org.h2.Driver
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    show-sql: true
-  kafka:
-    bootstrap-servers: localhost:9092
+Copy `.env.example` to `.env`:
+
+```bash
+KAFKA_BROKER_URL="localhost:9092"
+KAFKA_TOPIC="order-events"
 ```
 
-### Configuration Options
+### Application Configuration
+
+Configuration is managed via `src/main/resources/application.yaml`:
 
 | Property                         | Description                | Default               |
 | -------------------------------- | -------------------------- | --------------------- |
-| `spring.kafka.bootstrap-servers` | Kafka broker address       | `localhost:9092`      |
+| `spring.kafka.bootstrap-servers` | Kafka broker address       | `${KAFKA_BROKER_URL}` |
+| `spring.kafka.topic`             | Kafka topic for events     | `${KAFKA_TOPIC}`      |
 | `spring.datasource.url`          | Database connection URL    | `jdbc:h2:mem:orderdb` |
 | `spring.h2.console.enabled`      | Enable H2 console          | `true`                |
 | `spring.jpa.hibernate.ddl-auto`  | Schema generation strategy | `create-drop`         |
@@ -131,15 +136,15 @@ Creates a new order and publishes an `OrderCreated` event to Kafka.
 
 ```json
 {
-  "customerId": "123",
+  "customerId": "CUST-123",
   "items": [
     {
-      "productId": "prod-001",
+      "productId": "PROD-001",
       "quantity": 2,
-      "price": 29.99
+      "unitPrice": 29.99
     }
   ],
-  "totalAmount": 59.98
+  "currency": "USD"
 }
 ```
 
@@ -150,11 +155,25 @@ Creates a new order and publishes an `OrderCreated` event to Kafka.
   "status": "SUCCESS",
   "data": {
     "orderId": "uuid-here",
-    "status": "CREATED"
+    "status": "CREATED",
+    "totalAmount": 59.98,
+    "currency": "USD",
+    "createdAt": "2026-01-04T15:30:00Z"
   },
   "errorMessage": null
 }
 ```
+
+**Validation Errors:**
+
+| Field      | Validation               | Error Message                          |
+| ---------- | ------------------------ | -------------------------------------- |
+| customerId | Required, non-blank      | "Customer ID is required"              |
+| items      | Required, non-empty list | "Order must contain at least one item" |
+| currency   | Required, non-blank      | "Currency is required"                 |
+| productId  | Required for each item   | "Product ID is required for all items" |
+| quantity   | Must be > 0              | "Quantity must be greater than zero"   |
+| unitPrice  | Must be > 0              | "Unit price must be greater than zero" |
 
 ### API Documentation
 
@@ -171,8 +190,26 @@ Creates a new order and publishes an `OrderCreated` event to Kafka.
 ## Running Tests
 
 ```bash
+# Run all tests
 ./mvnw test
+
+# Run specific test class
+./mvnw test -Dtest=USECASE_CreateOrderTest
+
+# Run tests with verbose output
+./mvnw test -Dtest=USECASE_CreateOrderTest -q
 ```
+
+### Test Coverage
+
+The `USECASE_CreateOrderTest` includes **24 test cases** covering:
+
+- **Success Cases** – Valid order creation, helper method calls, order building
+- **Customer ID Validation** – null, empty, blank values
+- **Items Validation** – null, empty list
+- **Currency Validation** – null, empty, blank values
+- **Order Item Validation** – product ID, quantity, unit price validation
+- **Edge Cases** – No helper calls on validation failure
 
 ## Architecture
 
@@ -187,18 +224,29 @@ This service follows a **Clean Architecture** pattern:
 | **Services**   | Orchestrators that wire use cases with helpers                    |
 | **Spring**     | Spring beans for dependency injection (e.g., `BEAN_CreateOrder`)  |
 
+### Order Creation Workflow
+
+The `USECASE_CreateOrder` executes the following steps:
+
+1. **Validate Input** – Check customer ID, items, currency, and item details
+2. **Build Order** – Create Order entity with OrderItems, calculate totals
+3. **Save Order** – Persist to database via helper
+4. **Publish Event** – Send OrderCreated event to Kafka
+5. **Return Output** – Return order details to caller
+
 ## Event Flow
 
 ```
 ┌─────────────────┐     ┌────────────────────┐     ┌─────────────────────┐
-│  OrdersController│────▶│  SERVICE_CreateOrder│────▶│  USECASE_CreateOrder │
+│ OrdersController│────▶│ SERVICE_CreateOrder│────▶│ USECASE_CreateOrder │
 │ POST /create    │     │  (orchestrator)    │     │  (business logic)   │
 └─────────────────┘     └────────────────────┘     └─────────────────────┘
                                                             │
                                                             ▼
                         ┌─────────────────────────────────────────────────┐
                         │  CONTRACT_HELPER_CreateOrder_V0                 │
-                        │  └─▶ KafkaService.publishEvent(OrderCreated)    │
+                        │  ├─▶ saveOrder(order)                           │
+                        │  └─▶ publishEvent(OrderCreated)                 │
                         └─────────────────────────────────────────────────┘
                                                             │
                                                             ▼
@@ -218,6 +266,7 @@ This service follows a **Clean Architecture** pattern:
 | Schema    | `INPUT_<FeatureName>` / `OUTPUT_<FeatureName>` | `INPUT_CreateOrder`              |
 | Service   | `SERVICE_<FeatureName>`                        | `SERVICE_CreateOrder`            |
 | Bean      | `BEAN_<FeatureName>`                           | `BEAN_CreateOrder`               |
+| Exception | `<Name>Exception`                              | `InvalidOrderException`          |
 
 ## Related Services
 
