@@ -25,7 +25,8 @@ public class CONTRACT_HELPER_CreateOrder_V0 implements INTERFACE_HELPER_CreateOr
     @Override
     public Order saveOrder(Order order) {
         // Generate UUID for the order
-        String orderId = UUID.randomUUID().toString();
+        // String orderId = UUID.randomUUID().toString();
+        String orderId = "2";
         order.setId(orderId);
 
         // Generate UUIDs for each order item
