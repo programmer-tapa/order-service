@@ -14,7 +14,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -57,6 +56,13 @@ class USECASE_CreateOrderTest {
                 "USD");
     }
 
+    private Order createBuiltOrder() {
+        Order order = new Order();
+        order.setCustomerId("CUST-123");
+        order.setCurrency("USD");
+        return order;
+    }
+
     private Order createSavedOrder() {
         Order order = new Order();
         order.setId("ORDER-001");
@@ -79,9 +85,12 @@ class USECASE_CreateOrderTest {
         void execute_WithValidInput_ReturnsSuccessfulOutput() {
             // Arrange
             INPUT_CreateOrder input = createValidInput();
+            Order builtOrder = createBuiltOrder();
             Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
-            doNothing().when(mockHelper).publishEvent(any(Order.class));
+            doNothing().when(mockHelper).validateInput(input);
+            when(mockHelper.buildOrder(input)).thenReturn(builtOrder);
+            when(mockHelper.saveOrder(builtOrder)).thenReturn(savedOrder);
+            doNothing().when(mockHelper).publishEvent(savedOrder);
 
             // Act
             OUTPUT_CreateOrder output = usecase.execute(input);
@@ -96,18 +105,57 @@ class USECASE_CreateOrderTest {
         }
 
         @Test
-        @DisplayName("Should call saveOrder on helper")
-        void execute_WithValidInput_CallsSaveOrder() {
+        @DisplayName("Should call validateInput on helper")
+        void execute_WithValidInput_CallsValidateInput() {
             // Arrange
             INPUT_CreateOrder input = createValidInput();
+            Order builtOrder = createBuiltOrder();
             Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
+            doNothing().when(mockHelper).validateInput(input);
+            when(mockHelper.buildOrder(input)).thenReturn(builtOrder);
+            when(mockHelper.saveOrder(builtOrder)).thenReturn(savedOrder);
 
             // Act
             usecase.execute(input);
 
             // Assert
-            verify(mockHelper, times(1)).saveOrder(any(Order.class));
+            verify(mockHelper, times(1)).validateInput(input);
+        }
+
+        @Test
+        @DisplayName("Should call buildOrder on helper")
+        void execute_WithValidInput_CallsBuildOrder() {
+            // Arrange
+            INPUT_CreateOrder input = createValidInput();
+            Order builtOrder = createBuiltOrder();
+            Order savedOrder = createSavedOrder();
+            doNothing().when(mockHelper).validateInput(input);
+            when(mockHelper.buildOrder(input)).thenReturn(builtOrder);
+            when(mockHelper.saveOrder(builtOrder)).thenReturn(savedOrder);
+
+            // Act
+            usecase.execute(input);
+
+            // Assert
+            verify(mockHelper, times(1)).buildOrder(input);
+        }
+
+        @Test
+        @DisplayName("Should call saveOrder on helper")
+        void execute_WithValidInput_CallsSaveOrder() {
+            // Arrange
+            INPUT_CreateOrder input = createValidInput();
+            Order builtOrder = createBuiltOrder();
+            Order savedOrder = createSavedOrder();
+            doNothing().when(mockHelper).validateInput(input);
+            when(mockHelper.buildOrder(input)).thenReturn(builtOrder);
+            when(mockHelper.saveOrder(builtOrder)).thenReturn(savedOrder);
+
+            // Act
+            usecase.execute(input);
+
+            // Assert
+            verify(mockHelper, times(1)).saveOrder(builtOrder);
         }
 
         @Test
@@ -115,8 +163,11 @@ class USECASE_CreateOrderTest {
         void execute_WithValidInput_CallsPublishEvent() {
             // Arrange
             INPUT_CreateOrder input = createValidInput();
+            Order builtOrder = createBuiltOrder();
             Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
+            doNothing().when(mockHelper).validateInput(input);
+            when(mockHelper.buildOrder(input)).thenReturn(builtOrder);
+            when(mockHelper.saveOrder(builtOrder)).thenReturn(savedOrder);
 
             // Act
             usecase.execute(input);
@@ -126,81 +177,26 @@ class USECASE_CreateOrderTest {
         }
 
         @Test
-        @DisplayName("Should build order with correct customer ID")
-        void execute_WithValidInput_SetsCorrectCustomerId() {
+        @DisplayName("Should call helper methods in correct order")
+        void execute_WithValidInput_CallsMethodsInOrder() {
             // Arrange
             INPUT_CreateOrder input = createValidInput();
+            Order builtOrder = createBuiltOrder();
             Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
-            ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+            doNothing().when(mockHelper).validateInput(input);
+            when(mockHelper.buildOrder(input)).thenReturn(builtOrder);
+            when(mockHelper.saveOrder(builtOrder)).thenReturn(savedOrder);
+            doNothing().when(mockHelper).publishEvent(savedOrder);
 
             // Act
             usecase.execute(input);
 
-            // Assert
-            verify(mockHelper).saveOrder(orderCaptor.capture());
-            Order capturedOrder = orderCaptor.getValue();
-            assertEquals("CUST-123", capturedOrder.getCustomerId());
-        }
-
-        @Test
-        @DisplayName("Should build order with correct currency")
-        void execute_WithValidInput_SetsCorrectCurrency() {
-            // Arrange
-            INPUT_CreateOrder input = createValidInput();
-            Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
-            ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
-
-            // Act
-            usecase.execute(input);
-
-            // Assert
-            verify(mockHelper).saveOrder(orderCaptor.capture());
-            Order capturedOrder = orderCaptor.getValue();
-            assertEquals("USD", capturedOrder.getCurrency());
-        }
-
-        @Test
-        @DisplayName("Should build order with multiple items")
-        void execute_WithMultipleItems_AddsAllItems() {
-            // Arrange
-            List<InputOrderItem> items = List.of(
-                    createValidItem("PROD-001", 2, new BigDecimal("10.00")),
-                    createValidItem("PROD-002", 1, new BigDecimal("20.00")),
-                    createValidItem("PROD-003", 3, new BigDecimal("5.00")));
-            INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", items, "USD");
-            Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
-            ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
-
-            // Act
-            usecase.execute(input);
-
-            // Assert
-            verify(mockHelper).saveOrder(orderCaptor.capture());
-            Order capturedOrder = orderCaptor.getValue();
-            assertEquals(3, capturedOrder.getItems().size());
-        }
-
-        @Test
-        @DisplayName("Should calculate item total price correctly")
-        void execute_WithValidInput_CalculatesItemTotalPrice() {
-            // Arrange
-            InputOrderItem item = createValidItem("PROD-001", 3, new BigDecimal("15.00"));
-            INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(item), "USD");
-            Order savedOrder = createSavedOrder();
-            when(mockHelper.saveOrder(any(Order.class))).thenReturn(savedOrder);
-            ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
-
-            // Act
-            usecase.execute(input);
-
-            // Assert
-            verify(mockHelper).saveOrder(orderCaptor.capture());
-            Order capturedOrder = orderCaptor.getValue();
-            // 3 * 15.00 = 45.00
-            assertEquals(new BigDecimal("45.00"), capturedOrder.getItems().get(0).getTotalPrice());
+            // Assert - Verify order of calls
+            var inOrder = inOrder(mockHelper);
+            inOrder.verify(mockHelper).validateInput(input);
+            inOrder.verify(mockHelper).buildOrder(input);
+            inOrder.verify(mockHelper).saveOrder(builtOrder);
+            inOrder.verify(mockHelper).publishEvent(savedOrder);
         }
     }
 
@@ -215,6 +211,8 @@ class USECASE_CreateOrderTest {
         void execute_WithNullCustomerId_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder(null, List.of(createValidItem()), "USD");
+            doThrow(new InvalidOrderException("Customer ID is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -228,6 +226,8 @@ class USECASE_CreateOrderTest {
         void execute_WithEmptyCustomerId_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("", List.of(createValidItem()), "USD");
+            doThrow(new InvalidOrderException("Customer ID is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -241,6 +241,8 @@ class USECASE_CreateOrderTest {
         void execute_WithBlankCustomerId_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("   ", List.of(createValidItem()), "USD");
+            doThrow(new InvalidOrderException("Customer ID is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -259,6 +261,8 @@ class USECASE_CreateOrderTest {
         void execute_WithNullItems_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", null, "USD");
+            doThrow(new InvalidOrderException("Order must contain at least one item"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -272,6 +276,8 @@ class USECASE_CreateOrderTest {
         void execute_WithEmptyItems_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", Collections.emptyList(), "USD");
+            doThrow(new InvalidOrderException("Order must contain at least one item"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -290,6 +296,8 @@ class USECASE_CreateOrderTest {
         void execute_WithNullCurrency_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(createValidItem()), null);
+            doThrow(new InvalidOrderException("Currency is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -303,6 +311,8 @@ class USECASE_CreateOrderTest {
         void execute_WithEmptyCurrency_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(createValidItem()), "");
+            doThrow(new InvalidOrderException("Currency is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -316,6 +326,8 @@ class USECASE_CreateOrderTest {
         void execute_WithBlankCurrency_ThrowsInvalidOrderException() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(createValidItem()), "   ");
+            doThrow(new InvalidOrderException("Currency is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -335,6 +347,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem(null, 1, new BigDecimal("10.00"));
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Product ID is required for all items"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -349,6 +363,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem("   ", 1, new BigDecimal("10.00"));
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Product ID is required for all items"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -363,6 +379,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem("PROD-001", 0, new BigDecimal("10.00"));
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Quantity must be greater than zero"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -377,6 +395,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem("PROD-001", -5, new BigDecimal("10.00"));
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Quantity must be greater than zero"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -391,6 +411,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem("PROD-001", 1, null);
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Unit price must be greater than zero"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -405,6 +427,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem("PROD-001", 1, BigDecimal.ZERO);
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Unit price must be greater than zero"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -419,6 +443,8 @@ class USECASE_CreateOrderTest {
             // Arrange
             InputOrderItem invalidItem = new InputOrderItem("PROD-001", 1, new BigDecimal("-10.00"));
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", List.of(invalidItem), "USD");
+            doThrow(new InvalidOrderException("Unit price must be greater than zero"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
@@ -435,14 +461,19 @@ class USECASE_CreateOrderTest {
     class EdgeCases {
 
         @Test
-        @DisplayName("Should not call helper methods when validation fails")
-        void execute_WithInvalidInput_DoesNotCallHelper() {
+        @DisplayName("Should not call buildOrder, saveOrder or publishEvent when validation fails")
+        void execute_WithInvalidInput_DoesNotCallOtherHelperMethods() {
             // Arrange
             INPUT_CreateOrder input = new INPUT_CreateOrder(null, List.of(createValidItem()), "USD");
+            doThrow(new InvalidOrderException("Customer ID is required"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             assertThrows(InvalidOrderException.class, () -> usecase.execute(input));
-            verifyNoInteractions(mockHelper);
+            verify(mockHelper, times(1)).validateInput(input);
+            verify(mockHelper, never()).buildOrder(any());
+            verify(mockHelper, never()).saveOrder(any());
+            verify(mockHelper, never()).publishEvent(any());
         }
 
         @Test
@@ -454,6 +485,8 @@ class USECASE_CreateOrderTest {
                     new InputOrderItem("PROD-002", 0, new BigDecimal("20.00")) // Invalid quantity
             );
             INPUT_CreateOrder input = new INPUT_CreateOrder("CUST-123", items, "USD");
+            doThrow(new InvalidOrderException("Quantity must be greater than zero"))
+                    .when(mockHelper).validateInput(input);
 
             // Act & Assert
             InvalidOrderException exception = assertThrows(
