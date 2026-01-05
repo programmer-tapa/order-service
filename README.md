@@ -340,6 +340,24 @@ Events published to Kafka follow this structure:
 | **Double-Close Prevention** | Consumer closed flag prevents errors                            |
 | **DLQ with Metadata**       | Headers include `correlation_id` and `error_reason`             |
 
+### Failure Strategy (Producer Layer)
+
+The current implementation uses a synchronous publishing model. In a production environment, the following strategy would be applied to ensure zero data loss:
+
+1.  **Transactional Outbox Pattern**
+
+    - Save `Order` and `OutboxEvent` to the database in the _same ACID transaction_.
+    - This guarantees that if the Order is saved, the Event is also saved.
+    - A separate background worker polls the `outbox` table and publishes to Kafka.
+
+2.  **Fallback Behavior**
+
+    - If Kafka is unreachable during synchronous publish, the system logs the error with `CRITICAL` level.
+    - The `Contract` catches the exception to allow the REST response to complete (Order creation succeeds even if publishing fails temporarily), relying on the background worker (if implemented) or log scrapping to replay events.
+
+3.  **Idempotency**
+    - Events include a unique `id`. Consumers must handle duplicate events (e.g. if the outbox worker publishes, crashes, and republishes).
+
 ### Future Enhancements
 
 | Enhancement           | Description                                     |
