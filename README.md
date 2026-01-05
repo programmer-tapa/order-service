@@ -180,13 +180,6 @@ Creates a new order and publishes an `OrderCreated` event to Kafka.
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI JSON**: http://localhost:8080/v3/api-docs
 
-### H2 Console
-
-- **URL**: http://localhost:8080/h2-console
-- **JDBC URL**: `jdbc:h2:mem:orderdb`
-- **Username**: `sa`
-- **Password**: _(empty)_
-
 ## Running Tests
 
 ```bash
@@ -212,6 +205,48 @@ The `USECASE_CreateOrderTest` includes **24 test cases** covering:
 - **Edge Cases** – No helper calls on validation failure
 
 ## Architecture
+
+### Architecture Philosophy
+
+This codebase implements **Vertical Slice Architecture** combined with **Clean Architecture** principles, designed for **feature-driven development** in enterprise environments.
+
+#### Why This Structure?
+
+| Common First Impression          | Actual Intent                                                         |
+| -------------------------------- | --------------------------------------------------------------------- |
+| "Over-engineered"                | Deliberate vertical slice architecture for scalable team development  |
+| "Too many files"                 | Proper separation of concerns – each file has a single responsibility |
+| "Java patterns forced on Python" | Framework-agnostic patterns that work in any language                 |
+
+#### Design Decisions
+
+1. **Vertical Slices over Horizontal Layers**
+
+   - Each feature (`createOrder`, `processOrder`) is a self-contained unit
+   - Adding a new feature = adding a new folder, not modifying existing code
+   - Deleting a feature = deleting a folder, with zero impact on other features
+
+2. **Explicit Naming Convention**
+
+   - `USECASE_`, `SERVICE_`, `CONTRACT_`, `INTERFACE_` prefixes make the role of each class immediately clear
+   - Self-documenting code that scales across large teams
+   - Enables quick navigation in large codebases
+
+3. **Dependency Inversion**
+
+   - Business logic (use cases) depends on abstractions (interfaces), not implementations
+   - Contracts can be swapped without changing business logic (e.g., `V0` → `V1`)
+   - Enables easy testing with mock implementations
+
+This architecture is particularly suited for:
+
+- 🏢 **Enterprise microservices** with multiple teams
+- 🔄 **Polyglot environments** (same patterns in Python, Java, TypeScript)
+- 📈 **Rapidly evolving products** where features are added/removed frequently
+
+---
+
+### Clean Architecture Layers
 
 This service follows a **Clean Architecture** pattern:
 
@@ -255,6 +290,87 @@ The `USECASE_CreateOrder` executes the following steps:
                                                 │  (order-events)     │
                                                 └─────────────────────┘
 ```
+
+## Kafka Event Schema
+
+Events published to Kafka follow this structure:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "OrderCreated",
+  "data": {
+    "orderId": "12345",
+    "customerId": "cust-789",
+    "totalAmount": 150.0,
+    "currency": "INR",
+    "status": "CREATED",
+    "items": [
+      {
+        "productId": "prod-001",
+        "quantity": 2,
+        "unitPrice": 75.0,
+        "totalPrice": 150.0
+      }
+    ],
+    "createdAt": "2026-01-05T11:34:53.145Z"
+  }
+}
+```
+
+| Field              | Type   | Description                                       |
+| ------------------ | ------ | ------------------------------------------------- |
+| `id`               | UUID   | Unique event identifier                           |
+| `name`             | string | Event type (e.g., `OrderCreated`, `OrderShipped`) |
+| `data`             | object | Event-specific payload                            |
+| `data.orderId`     | string | Order identifier                                  |
+| `data.customerId`  | string | Customer identifier                               |
+| `data.totalAmount` | float  | Order total                                       |
+| `data.currency`    | string | Currency code (ISO 4217)                          |
+
+## Failure Handling & Reliability
+
+### Implemented Failsafe Mechanisms
+
+| Mechanism                   | Implementation                                                  |
+| --------------------------- | --------------------------------------------------------------- |
+| **Connection Retry**        | 5 attempts with exponential backoff (1s → 2s → 4s → 8s → 16s)   |
+| **Correlation IDs**         | UUID generated per message for distributed tracing `[abc12345]` |
+| **Safe JSON Parsing**       | Invalid JSON caught and routed to DLQ                           |
+| **Double-Close Prevention** | Consumer closed flag prevents errors                            |
+| **DLQ with Metadata**       | Headers include `correlation_id` and `error_reason`             |
+
+### Future Enhancements
+
+| Enhancement           | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| Health Check Endpoint | Kubernetes readiness probe integration          |
+| Manual Offset Commit  | At-least-once delivery guarantee                |
+| Circuit Breaker       | Prevent cascade failures to downstream services |
+| Consumer Scaling      | Horizontal scaling via topic partitioning       |
+
+## Interview Talking Points
+
+<details>
+<summary>Click to expand prepared answers for common interview questions</summary>
+
+### "Describe the architecture"
+
+> "This is a Java Spring Boot service that creates orders and publishes events. Domain logic is isolated using Clean Architecture with Vertical Slices. It uses Spring Data JPA for persistence and Spring Kafka for event publishing."
+
+### "Why Clean Architecture?"
+
+> "It enables independent testing of business rules, isolates side-effects, and makes it easy to swap implementations (e.g., Kafka → RabbitMQ, H2 → PostgreSQL) without changing core logic. Each feature is a self-contained vertical slice that can be developed, tested, and deployed independently."
+
+### "How would you scale this?"
+
+> "For the producer service, I'd scale horizontally behind a load balancer. For the database, I'd use connection pooling and potentially read replicas. For Kafka, I'd ensure proper partitioning based on order ID to allow parallel consumption while maintaining order guarantees."
+
+### "What happens if Kafka is down?"
+
+> "Currently, the service might fail to publish. In production, I'd implement an outbox pattern: save the event to the database in the same transaction as the order, then have a separate background worker publish events to Kafka. This ensures data consistency even if the broker is unavailable."
+
+</details>
 
 ## Naming Conventions
 
